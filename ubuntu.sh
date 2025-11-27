@@ -78,19 +78,13 @@ info "Installing Caddy web server..."
 # Remove old Caddy repo files
 sudo rm -f /etc/apt/sources.list.d/caddy.list || true
 
-# Add Cloudsmith GPG key
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-    | sudo gpg --dearmor -o /usr/share/keyrings/caddy.gpg
-
-# Hardcode repo to jammy (Cloudsmith has no noble repo yet)
-CADDY_REPO="deb [signed-by=/usr/share/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian jammy main"
-
-# Add repository
-echo "$CADDY_REPO" | sudo tee /etc/apt/sources.list.d/caddy.list > /dev/null
-
-# Update & install
-sudo apt-get update -y
-sudo apt-get install -y caddy
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
+chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update
+sudo apt install caddy
 
 # Enable & start service
 sudo systemctl enable caddy
