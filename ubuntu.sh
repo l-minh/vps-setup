@@ -74,30 +74,26 @@ fi
 
 # ---------- Install Caddy ----------
 info "Installing Caddy web server..."
+
 # Remove old Caddy repo files
 run_as_sudo rm -f /etc/apt/sources.list.d/caddy.list || true
 
-# Add Cloudsmith key
+# Add Cloudsmith GPG key
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
     | run_as_sudo gpg --dearmor -o /usr/share/keyrings/caddy.gpg
 
-# Use stable Ubuntu codename (fallback to jammy if unknown)
-case "$UBUNTU_CODENAME" in
-    focal|20.04) CADDY_UBUNTU="focal";;
-    jammy|22.04) CADDY_UBUNTU="jammy";;
-    noble|24.04) CADDY_UBUNTU="jammy";;  # Cloudsmith doesn’t have noble yet, fallback to jammy
-    *) CADDY_UBUNTU="jammy";;
-esac
+# Hardcode repo to use "jammy" codename for 24.04, since Cloudsmith has no noble repo
+CADDY_REPO_CODENAME="jammy"
 
-# Add repo
-echo "deb [signed-by=/usr/share/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian $CADDY_UBUNTU main" \
+# Add Caddy repository
+echo "deb [signed-by=/usr/share/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian $CADDY_REPO_CODENAME main" \
     | run_as_sudo tee /etc/apt/sources.list.d/caddy.list > /dev/null
 
-# Update & install
+# Update and install
 run_as_sudo apt-get update -y
 run_as_sudo apt-get install -y caddy
 
-# Enable and start
+# Enable and start service
 run_as_sudo systemctl enable caddy
 run_as_sudo systemctl start caddy
 
