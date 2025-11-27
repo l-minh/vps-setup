@@ -74,32 +74,32 @@ fi
 
 # ---------- Install Caddy ----------
 info "Installing Caddy web server..."
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | run_as_sudo gpg --dearmor -o /usr/share/keyrings/caddy.gpg
-curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | run_as_sudo tee /etc/apt/sources.list.d/caddy.list > /dev/null
+# Remove old Caddy repo files
+run_as_sudo rm -f /etc/apt/sources.list.d/caddy.list || true
+
+# Add Cloudsmith key
+curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+    | run_as_sudo gpg --dearmor -o /usr/share/keyrings/caddy.gpg
+
+# Use stable Ubuntu codename (fallback to jammy if unknown)
+case "$UBUNTU_CODENAME" in
+    focal|20.04) CADDY_UBUNTU="focal";;
+    jammy|22.04) CADDY_UBUNTU="jammy";;
+    noble|24.04) CADDY_UBUNTU="jammy";;  # Cloudsmith doesn’t have noble yet, fallback to jammy
+    *) CADDY_UBUNTU="jammy";;
+esac
+
+# Add repo
+echo "deb [signed-by=/usr/share/keyrings/caddy.gpg] https://dl.cloudsmith.io/public/caddy/stable/deb/debian $CADDY_UBUNTU main" \
+    | run_as_sudo tee /etc/apt/sources.list.d/caddy.list > /dev/null
+
+# Update & install
 run_as_sudo apt-get update -y
 run_as_sudo apt-get install -y caddy
+
+# Enable and start
 run_as_sudo systemctl enable caddy
 run_as_sudo systemctl start caddy
-
-# ---------- Create swap ----------
-info "Creating ${SWAP_SIZE_GB}GB swap if not exists..."
-if [ ! -f /swapfile ]; then
-    run_as_sudo fallocate -l "${SWAP_SIZE_GB}G" /swapfile
-    run_as_sudo chmod 600 /swapfile
-    run_as_sudo mkswap /swapfile
-    run_as_sudo swapon /swapfile
-    echo "/swapfile swap swap defaults 0 0" | run_as_sudo tee -a /etc/fstab > /dev/null
-fi
-
-# ---------- UFW ----------
-info "Configuring UFW firewall..."
-run_as_sudo apt-get install -y ufw
-run_as_sudo ufw allow 22/tcp
-run_as_sudo ufw allow 80/tcp
-run_as_sudo ufw allow 443/tcp
-if ! run_as_sudo ufw status | grep -q "Status: active"; then
-    run_as_sudo ufw --force enable
-fi
 
 # ---------- Install tmux ----------
 info "Installing tmux..."
