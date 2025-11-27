@@ -118,7 +118,7 @@ run_as_sudo systemctl restart fail2ban
 
 # ---------- Install bpytop ----------
 info "Installing bpytop (Python resource monitor)..."
-pip3 install --user bpytop
+sudo apt-get install -y bpytop
 
 # ---------- Cleanup ----------
 info "Cleaning up..."
