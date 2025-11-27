@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# setup.sh
-# Ubuntu bootstrap installer (Flexible Mode)
+# Ubuntu bootstrap installer (MongoDB 8.0 fixed)
 # Installs:
 # - .NET 8
-# - MongoDB (auto-select version: 7.0/8.0)
+# - MongoDB 8.0 (always)
 # - Caddy
 # - Fail2Ban
 # - Swap RAM
@@ -14,42 +13,26 @@
 #
 # Usage:
 #   curl -fsSL https://your-host/setup.sh | sudo bash
-#
+
 set -euo pipefail
 
 # ---------- Config ----------
 SWAP_SIZE_GB=4       # Change if needed
 LOG_PREFIX="[setup]"
-MONGODB_DEFAULT="8.0"  # Used for unknown/new Ubuntu releases
+ARCH=$(dpkg --print-architecture)
 
-# ---------- Helpers ----------
 info()    { printf "%s INFO: %s\n" "$LOG_PREFIX" "$*"; }
 warn()    { printf "%s WARN: %s\n" "$LOG_PREFIX" "$*"; }
 error()   { printf "%s ERROR: %s\n" "$LOG_PREFIX" "$*" >&2; }
 run_as_sudo(){ if [ "$(id -u)" -ne 0 ]; then sudo "$@"; else "$@"; fi }
 
-# ---------- Detect OS ----------
+# ---------- Detect Ubuntu ----------
 if ! command -v lsb_release >/dev/null 2>&1; then
   run_as_sudo apt-get update -y
   run_as_sudo apt-get install -y lsb-release >/dev/null 2>&1 || true
 fi
-
 UBUNTU_CODENAME=$(lsb_release -cs)
-ARCH=$(dpkg --print-architecture)
-
 info "Detected Ubuntu codename: ${UBUNTU_CODENAME}, arch: ${ARCH}"
-
-# ---------- Determine MongoDB version ----------
-case "${UBUNTU_CODENAME}" in
-  focal|20.04) MONGO_VER="7.0";;
-  jammy|22.04) MONGO_VER="7.0";;
-  noble|24.04) MONGO_VER="8.0";;
-  *)
-    warn "Unknown/new Ubuntu codename '${UBUNTU_CODENAME}', defaulting MongoDB to ${MONGODB_DEFAULT}."
-    MONGO_VER="${MONGODB_DEFAULT}"
-    ;;
-esac
-info "Will install MongoDB ${MONGO_VER}"
 
 # ---------- Update & essentials ----------
 info "Updating system packages..."
@@ -68,37 +51,22 @@ run_as_sudo apt-get install -y dotnet-sdk-8.0 aspnetcore-runtime-8.0 || {
     run_as_sudo apt-get install -y dotnet-sdk-8.0 || true
 }
 
-# ---------- Install MongoDB ----------
-info "Installing MongoDB ${MONGO_VER}..."
+# ---------- Install MongoDB 8.0 ----------
+info "Installing MongoDB 8.0..."
 run_as_sudo rm -f /etc/apt/sources.list.d/mongodb-org-*.list || true
 
-if [[ "${MONGO_VER%%.*}" -ge 8 ]]; then
-    curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | run_as_sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
-    echo "deb [ arch=${ARCH} signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${UBUNTU_CODENAME}/mongodb-org/8.0 multiverse" \
-        | run_as_sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list > /dev/null
-else
-    curl -fsSL https://pgp.mongodb.com/server-7.0.asc | run_as_sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
-    echo "deb [ arch=${ARCH} signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${UBUNTU_CODENAME}/mongodb-org/7.0 multiverse" \
-        | run_as_sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list > /dev/null
-fi
+# Import GPG key
+curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | run_as_sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
 
+# Add repository
+echo "deb [ arch=${ARCH} signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${UBUNTU_CODENAME}/mongodb-org/8.0 multiverse" \
+    | run_as_sudo tee /etc/apt/sources.list.d/mongodb-org-8.0.list > /dev/null
+
+# Update & install
 run_as_sudo apt-get update -y || warn "apt update warning (possibly unsupported codename)"
-if ! run_as_sudo apt-get install -y mongodb-org; then
-    warn "MongoDB install failed, attempting fallback using jammy repo..."
-    FALLBACK_CODENAME="jammy"
-    if [[ "${MONGO_VER%%.*}" -ge 8 ]]; then
-        curl -fsSL https://www.mongodb.org/static/pgp/server-8.0.asc | run_as_sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-8.0.gpg
-        echo "deb [ arch=${ARCH} signed-by=/usr/share/keyrings/mongodb-server-8.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${FALLBACK_CODENAME}/mongodb-org/8.0 multiverse" \
-            | run_as_sudo tee /etc/apt/sources.list.d/mongodb-org-8.0-fallback.list > /dev/null
-    else
-        curl -fsSL https://pgp.mongodb.com/server-7.0.asc | run_as_sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
-        echo "deb [ arch=${ARCH} signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu ${FALLBACK_CODENAME}/mongodb-org/7.0 multiverse" \
-            | run_as_sudo tee /etc/apt/sources.list.d/mongodb-org-7.0-fallback.list > /dev/null
-    fi
-    run_as_sudo apt-get update -y
-    run_as_sudo apt-get install -y mongodb-org || warn "MongoDB install failed even after fallback."
-fi
+run_as_sudo apt-get install -y mongodb-org || warn "MongoDB install may fail on unsupported Ubuntu versions"
 
+# Enable & start MongoDB
 if systemctl list-unit-files | grep -q '^mongod'; then
     run_as_sudo systemctl enable mongod
     run_as_sudo systemctl start mongod
